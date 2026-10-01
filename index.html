@@ -30,7 +30,21 @@ button,input,select{font:inherit}button{cursor:pointer;border:0}.app{display:fle
 </main>
 </div>
 <div class="toast" id="toast"></div>
+<script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+ <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <script>
+const SUPABASE_URL = "https://rffifgnxrdiacklahpau.supabase.co";
+const SUPABASE_KEY = "sb_publishable_b3shv7MabRAVeeEuXGyAYw_A0HA0e_Q";
+
+const supabase = window.supabase.createClient(
+  SUPABASE_URL,
+  SUPABASE_KEY
+);
+</script>
+
+<script>
+const teams={
 const teams={
 "M":["Лысый","Крейзи","Юля","Ваня","Олег"],
 "Y":["Жменя","Кармочка","DiD","Elli"],
@@ -40,11 +54,95 @@ const teams={
 "I":["Дитер","Reset","Сокет"]
 };
 const metrics={retention:"RETENTION",deposits:"DEPOSITS",tubes:"ТРУБКИ"};
-let data=JSON.parse(localStorage.getItem("broLeagueV2")||"null")||{
-values:Object.fromEntries(Object.values(teams).flat().map(n=>[n,{retention:0,deposits:0,tubes:0}])),
-versus:[],
-bonuses:[]
+let data={
+  values:Object.fromEntries(
+    Object.values(teams).flat().map(n=>[
+      n,
+      {retention:0,deposits:0,tubes:0}
+    ])
+  ),
+  versus:[],
+  bonuses:[]
 };
+
+async function loadData(){
+  const [
+    {data: managers, error: managersError},
+    {data: retention, error: retentionError},
+    {data: deposits, error: depositsError},
+    {data: calls, error: callsError},
+    {data: versus, error: versusError},
+    {data: bonuses, error: bonusesError}
+  ] = await Promise.all([
+    supabase.from("managers").select("id,name"),
+    supabase.from("retention").select("manager_id,value"),
+    supabase.from("deposits").select("manager_id,value"),
+    supabase.from("calls").select("manager_id,value"),
+    supabase.from("versus").select("*"),
+    supabase.from("bonuses").select("*")
+  ]);
+
+  if(managersError || retentionError || depositsError || callsError || versusError || bonusesError){
+    console.error({
+      managersError,
+      retentionError,
+      depositsError,
+      callsError,
+      versusError,
+      bonusesError
+    });
+    toast("Ошибка загрузки данных из Supabase");
+    return;
+  }
+
+  managers.forEach(m=>{
+    if(!data.values[m.name]){
+      data.values[m.name]={retention:0,deposits:0,tubes:0};
+    }
+  });
+
+  retention.forEach(r=>{
+    const m=managers.find(x=>x.id===r.manager_id);
+    if(m && data.values[m.name]) data.values[m.name].retention=Number(r.value)||0;
+  });
+
+  deposits.forEach(r=>{
+    const m=managers.find(x=>x.id===r.manager_id);
+    if(m && data.values[m.name]) data.values[m.name].deposits=Number(r.value)||0;
+  });
+
+  calls.forEach(r=>{
+    const m=managers.find(x=>x.id===r.manager_id);
+    if(m && data.values[m.name]) data.values[m.name].tubes=Number(r.value)||0;
+  });
+
+  data.versus=versus.map(v=>{
+    const p1=managers.find(m=>m.id===v.manager1_id)?.name;
+    const p2=managers.find(m=>m.id===v.manager2_id)?.name;
+    return {
+      p1,
+      p2,
+      metric:v.metric,
+      date:v.match_date
+    };
+  }).filter(v=>v.p1 && v.p2);
+
+  data.bonuses=bonuses.map(b=>({
+    targetType:b.recipient_type,
+    target:b.manager_id
+      ? managers.find(m=>m.id===b.manager_id)?.name
+      : b.team_id
+        ? Object.keys(teams).find(t=>t===b.team_id)
+        : null,
+    title:b.title,
+    condition:b.condition,
+    reward:b.reward,
+    dateTo:b.end_date,
+    active:b.active
+  }));
+
+  render();
+}
 if(!data.bonuses)data.bonuses=[];
 function save(){localStorage.setItem("broLeagueV2",JSON.stringify(data))}
 function teamOf(name){return Object.keys(teams).find(t=>teams[t].includes(name))}
@@ -116,7 +214,9 @@ function removeBonus(i){if(confirm("Удалить этот бонус?")){data.
 function resetData(){if(confirm("Сбросить все значения и матчи?")){localStorage.removeItem("broLeagueV2");location.reload()}}
 function toast(t){let e=document.getElementById("toast");e.textContent=t;e.style.display="block";setTimeout(()=>e.style.display="none",1800)}
 document.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{location.hash=b.dataset.page});
-window.onhashchange=render;render(); if((location.hash||"#home")==="#league"){setTimeout(()=>document.querySelector("#leagueTabs button")?.click(),0)} else if(location.hash==="#versus"){setTimeout(()=>document.querySelector("#vTabs button")?.click(),0)} else if(location.hash==="#teams"){setTimeout(()=>document.querySelector("#tTabs button")?.click(),0)}
+window.onhashchange=render;
+
+loadData(); if((location.hash||"#home")==="#league"){setTimeout(()=>document.querySelector("#leagueTabs button")?.click(),0)} else if(location.hash==="#versus"){setTimeout(()=>document.querySelector("#vTabs button")?.click(),0)} else if(location.hash==="#teams"){setTimeout(()=>document.querySelector("#tTabs button")?.click(),0)}
 </script>
 </body>
 </html> 
